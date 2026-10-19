@@ -25,6 +25,8 @@ Commandes (boutons, raccourcis clavier ou ligne de commande) :
 | `DAM` | Afficher les avaries |
 | `COM` | Ouvrir l’ordinateur de bord |
 
+Le guide complet, écran par écran, se trouve dans [AIDE.md](AIDE.md).
+
 Les règles reprennent *Super Star Trek* de Bob Leedom (1974), dérivé du *Star Trek* de Mike Mayfield (1971) et publié par David Ahl.
 
 ## Développement
