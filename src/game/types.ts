@@ -61,7 +61,15 @@ export type GameEvent =
   | { type: 'warp'; leaving: boolean }
   | { type: 'impulse'; path: Pos[] }
   | { type: 'alert' }
-  | { type: 'dock' }
+  | {
+      type: 'dock'
+      base: Pos
+      ship: Pos
+      /** Réserves juste avant le ravitaillement, pour animer les jauges. */
+      before: { energy: number; shields: number; torpedoes: number }
+      /** Systèmes endommagés que la base peut réparer. */
+      repairs: number
+    }
 
 export interface Outcome {
   state: GameState

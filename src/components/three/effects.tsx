@@ -259,6 +259,90 @@ function Absorb({ at }: { at: Pos }) {
   )
 }
 
+/** Ravitaillement : un flux d'énergie verte coule de la base vers l'Enterprise, entouré d'anneaux. */
+function Dock({ base, ship, ms }: { base: Pos; ship: Pos; ms: number }) {
+  const a = toV(base, 0.18)
+  const b = toV(ship, 0.14)
+  const N = 9
+  const dots = useRef<(THREE.Sprite | null)[]>([])
+  const rings = useRef<(THREE.Mesh | null)[]>([])
+  const aura = useRef<THREE.Sprite>(null)
+  const light = useRef<THREE.PointLight>(null)
+  const line = useRef<{ material: { opacity: number; dashOffset: number } } | null>(null)
+  const green = useMemo(() => new THREE.Color('#6ee7a0').multiplyScalar(2.2), [])
+  useLocalTime((t) => {
+    const dur = ms / 1000
+    const fade = Math.min(1, t / 0.2, Math.max(0, (dur + 0.3 - t) / 0.3))
+    dots.current.forEach((d, i) => {
+      if (!d) return
+      const k = (t / 0.45 + i / N) % 1
+      d.position.lerpVectors(a, b, k)
+      d.position.y += Math.sin(k * Math.PI) * 0.25
+      d.scale.setScalar((0.18 + 0.14 * Math.sin(k * Math.PI)) * fade)
+      d.visible = t < dur
+    })
+    rings.current.forEach((r, i) => {
+      if (!r) return
+      const k = (((t - i * 0.35) % 1) + 1) % 1
+      r.scale.setScalar(0.3 + k * 0.9)
+      ;(r.material as THREE.MeshBasicMaterial).opacity = (1 - k) * fade * (t > i * 0.35 ? 1 : 0)
+    })
+    if (aura.current) {
+      aura.current.scale.setScalar(1.6 + 0.3 * Math.sin(t * 9))
+      ;(aura.current.material as THREE.SpriteMaterial).opacity = 0.55 * fade
+    }
+    if (light.current) light.current.intensity = 3 * fade
+    if (line.current) {
+      line.current.material.opacity = 0.8 * fade
+      line.current.material.dashOffset -= 0.04
+    }
+  })
+  return (
+    <group>
+      <Line ref={line as never} points={[a, b]} color={green} lineWidth={3} toneMapped={false} transparent dashed dashSize={0.1} gapSize={0.08} />
+      {Array.from({ length: N }, (_, i) => (
+        <sprite key={i} ref={(el) => void (dots.current[i] = el)}>
+          <spriteMaterial map={radialTexture()} color={green} transparent blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+        </sprite>
+      ))}
+      <group position={b}>
+        {[0, 1, 2].map((i) => (
+          <mesh key={i} ref={(el) => void (rings.current[i] = el)} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.5, 0.018, 6, 48]} />
+            <meshBasicMaterial color={green} toneMapped={false} transparent opacity={0} depthWrite={false} />
+          </mesh>
+        ))}
+        <sprite ref={aura}>
+          <spriteMaterial map={radialTexture()} color="#6ee7a0" transparent blending={THREE.AdditiveBlending} depthWrite={false} />
+        </sprite>
+        <pointLight ref={light} color="#6ee7a0" distance={3} decay={2} />
+      </group>
+    </group>
+  )
+}
+
+/** Liaison d'amarrage permanente entre la base et l'Enterprise. */
+export function DockTether({ base, ship }: { base: Pos; ship: Pos }) {
+  const line = useRef<{ material: { dashOffset: number } } | null>(null)
+  useFrame((_, dt) => {
+    if (line.current) line.current.material.dashOffset -= dt * 0.25
+  })
+  return (
+    <Line
+      ref={line as never}
+      points={[toV(base, 0.12), toV(ship, 0.12)]}
+      color={new THREE.Color('#6ee7a0').multiplyScalar(1.4)}
+      lineWidth={1.6}
+      toneMapped={false}
+      transparent
+      opacity={0.55}
+      dashed
+      dashSize={0.05}
+      gapSize={0.07}
+    />
+  )
+}
+
 export function Effect3D({ fx }: { fx: Fx }) {
   switch (fx.kind) {
     case 'phaser':
@@ -271,5 +355,7 @@ export function Effect3D({ fx }: { fx: Fx }) {
       return <Explosion at={fx.at} big={fx.big} />
     case 'absorb':
       return <Absorb at={fx.at} />
+    case 'dock':
+      return <Dock base={fx.base} ship={fx.ship} ms={fx.ms} />
   }
 }

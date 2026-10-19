@@ -160,6 +160,10 @@ export function SectorView({ state, fx, warp, shake, moveMs, aim, describe, onCe
               </g>
             ))}
 
+          {!srsDown && state.base && state.docked && !moveMs && (
+            <line x1={cx(state.base)} y1={cy(state.base)} x2={cx(state.sector)} y2={cy(state.sector)} className="dock-tether" />
+          )}
+
           {!srsDown && state.base && (
             <g transform={`translate(${cx(state.base)} ${cy(state.base)})`}>
               <Starbase />
@@ -333,7 +337,42 @@ function Effect({ fx }: { fx: Fx }) {
       )
     case 'absorb':
       return <circle cx={cx(fx.at)} cy={cy(fx.at)} r="40" className="fx-absorb" />
+    case 'dock':
+      return <DockStream base={fx.base} ship={fx.ship} ms={fx.ms} />
   }
+}
+
+/** Ravitaillement : un flux d'énergie coule de la base vers l'Enterprise, qui s'illumine. */
+function DockStream({ base, ship, ms }: { base: Pos; ship: Pos; ms: number }) {
+  const [t, setT] = useState(0)
+  useEffect(() => {
+    let raf = 0
+    const start = performance.now()
+    const tick = (now: number) => {
+      setT(now - start)
+      if (now - start < ms + 400) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [ms])
+  const fade = Math.min(1, t / 200, Math.max(0, (ms + 300 - t) / 300))
+  const a = { x: cx(base), y: cy(base) }
+  const b = { x: cx(ship), y: cy(ship) }
+  return (
+    <g className="fx-dock" style={{ opacity: fade }}>
+      <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="stream-glow" />
+      <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="stream-core" />
+      {t < ms &&
+        Array.from({ length: 7 }, (_, i) => {
+          const k = (t / 450 + i / 7) % 1
+          return <circle key={i} cx={a.x + (b.x - a.x) * k} cy={a.y + (b.y - a.y) * k} r={5 + 3 * Math.sin(k * Math.PI)} className="stream-dot" />
+        })}
+      <circle cx={b.x} cy={b.y} r="40" className="dock-ring" />
+      <circle cx={b.x} cy={b.y} r="40" className="dock-ring" style={{ animationDelay: '0.35s' }} />
+      <circle cx={b.x} cy={b.y} r="40" className="dock-ring" style={{ animationDelay: '0.7s' }} />
+      <circle cx={b.x} cy={b.y} r="46" className="dock-aura" />
+    </g>
+  )
 }
 
 function Torpedo({ from, path, ms }: { from: Pos; path: Pos[]; ms: number }) {

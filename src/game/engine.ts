@@ -209,7 +209,13 @@ function checkDocking(ctx: Ctx) {
   const near = s.base && Math.abs(s.base.r - s.sector.r) <= 1 && Math.abs(s.base.c - s.sector.c) <= 1
   if (near) {
     if (!s.docked) {
-      ctx.emit({ type: 'dock' })
+      ctx.emit({
+        type: 'dock',
+        base: { ...s.base! },
+        ship: { ...s.sector },
+        before: { energy: s.energy, shields: s.shields, torpedoes: s.torpedoes },
+        repairs: s.damage.filter((d) => d < 0).length,
+      })
       ctx.log('Amarrage à la base stellaire. Boucliers abaissés pour l’amarrage.', 'success')
       ctx.log('Énergie et torpilles réapprovisionnées.', 'success')
     }
