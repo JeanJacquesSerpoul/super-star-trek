@@ -11,10 +11,11 @@ import {
   fireTorpedo,
   fmtPos,
   longRangeScan,
+  navExit,
   navigate,
   setShields,
 } from './game/engine'
-import type { GameState, LogLine, Pos } from './game/types'
+import type { Aim, GameState, LogLine, Pos } from './game/types'
 import { GalaxyMap } from './components/GalaxyMap'
 import {
   ComputerPanel,
@@ -170,12 +171,12 @@ export default function App() {
     sfx.beep(1040)
   }
 
-  const aim = useMemo(() => {
+  const aim = useMemo((): Aim | null => {
     if (!briefed || busy || !playing) return null
-    if (panel === 'nav') return { course: navCourse, steps: Math.floor(warp * 8 + 0.5), kind: 'nav' as const }
-    if (panel === 'tor') return { course: torCourse, steps: null, kind: 'tor' as const }
+    if (panel === 'nav') return { course: navCourse, steps: Math.floor(warp * 8 + 0.5), kind: 'nav', exit: describeExit(state, navCourse, warp) }
+    if (panel === 'tor') return { course: torCourse, steps: null, kind: 'tor', exit: null }
     return null
-  }, [panel, navCourse, warp, torCourse, busy, playing, briefed])
+  }, [panel, navCourse, warp, torCourse, busy, playing, briefed, state])
 
   const viewProps = {
     state: shown,
@@ -355,6 +356,20 @@ export default function App() {
       {!briefed && <Briefing state={state} onAccept={() => { setBriefed(true); game.begin() }} />}
     </div>
   )
+}
+
+/** Libellé du marqueur de sortie : quadrant d'arrivée, ou arrêt au périmètre galactique. */
+function describeExit(s: GameState, course: number, warp: number): Aim['exit'] {
+  const e = navExit(s, course, warp)
+  if (!e) return null
+  const name = regionName(e.quad.r, e.quad.c)
+  if (e.perimeter) {
+    const same = e.quad.r === s.quad.r && e.quad.c === s.quad.c
+    return { edge: e.edge, perimeter: true, title: 'Périmètre galactique', sub: same ? `arrêt au secteur ${fmtPos(e.sector)}` : `arrêt en ${name}, secteur ${fmtPos(e.sector)}` }
+  }
+  const code = s.known[e.quad.r][e.quad.c]
+  const intel = code === null ? 'inexploré' : code >= 100 ? `${Math.floor(code / 100)} Klingon${code >= 200 ? 's' : ''} signalé${code >= 200 ? 's' : ''}` : 'aucun Klingon signalé'
+  return { edge: e.edge, perimeter: false, title: `Vers ${name}`, sub: `secteur ${fmtPos(e.sector)} · ${intel}` }
 }
 
 function Gauge({ label, value, max, tone }: { label: string; value: number; max: number; tone: string }) {

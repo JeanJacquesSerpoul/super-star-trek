@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DEV, regionName } from '../game/constants'
-import { courseVector } from '../game/engine'
-import type { GameState, Pos } from '../game/types'
+import { courseVector, exitSide } from '../game/engine'
+import type { Aim, AimExit, GameState, Pos } from '../game/types'
 import type { Fx, WarpPhase } from '../useGame'
 import { Enterprise, Klingon, Star, StarGlowDefs, Starbase } from './art'
 
@@ -32,7 +32,7 @@ interface Props {
   warp: WarpPhase
   shake: number
   moveMs: number
-  aim: { course: number; steps: number | null; kind: 'nav' | 'tor' } | null
+  aim: Aim | null
   describe: (p: Pos) => string | null
   onCell: (p: Pos) => void
   interactive: boolean
@@ -78,7 +78,7 @@ export function SectorView({ state, fx, warp, shake, moveMs, aim, describe, onCe
       x += dr
       y += dc
       if (x < -0.5 || x > 7.5 || y < -0.5 || y > 7.5) {
-        pts.push({ r: x, c: y })
+        pts.push(aim.exit ? aim.exit.edge : { r: x, c: y })
         break
       }
       pts.push({ r: x, c: y })
@@ -149,6 +149,7 @@ export function SectorView({ state, fx, warp, shake, moveMs, aim, describe, onCe
               points={aimPath.map((p) => `${cx(p)},${cy(p)}`).join(' ')}
             />
           )}
+          {aim?.exit && <ExitGate exit={aim.exit} course={aim.course} />}
 
           {!srsDown &&
             state.stars.map((s, i) => (
@@ -232,6 +233,7 @@ export function SectorView({ state, fx, warp, shake, moveMs, aim, describe, onCe
             )
           })}
       </svg>
+      {aim?.exit && <ExitTag exit={aim.exit} />}
       {label && hover && (
         <div
           className="cell-tip"
@@ -240,6 +242,42 @@ export function SectorView({ state, fx, warp, shake, moveMs, aim, describe, onCe
           {label}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Porte lumineuse sur le bord du quadrant, à l'endroit où l'Enterprise passera en distorsion. */
+function ExitGate({ exit, course }: { exit: AimExit; course: number }) {
+  const side = exitSide(exit.edge)
+  const x = cx(exit.edge)
+  const y = cy(exit.edge)
+  const along = side === 'e' || side === 'w'
+  const h = 46
+  return (
+    <g className={`exit-gate ${exit.perimeter ? 'blocked' : ''}`}>
+      <line x1={along ? x : x - h} y1={along ? y - h : y} x2={along ? x : x + h} y2={along ? y + h : y} className="gate-glow" />
+      <line x1={along ? x : x - h} y1={along ? y - h : y} x2={along ? x : x + h} y2={along ? y + h : y} className="gate-core" />
+      <g transform={`translate(${x} ${y}) rotate(${headingDeg(course)})`}>
+        {exit.perimeter ? (
+          <path d="M-9 -9 L9 9 M9 -9 L-9 9" className="gate-mark" />
+        ) : (
+          [0, 1, 2].map((i) => <path key={i} d={`M${-8 + i * 9} -10 L${i * 9} 0 L${-8 + i * 9} 10`} className="gate-mark" style={{ animationDelay: `${i * 0.15}s` }} />)
+        )}
+      </g>
+    </g>
+  )
+}
+
+/** Étiquette de destination, posée à l'intérieur du plateau contre le bord franchi. */
+function ExitTag({ exit }: { exit: AimExit }) {
+  const side = exitSide(exit.edge)
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+  const x = side === 'e' || side === 'w' ? cx(exit.edge) : clamp(cx(exit.edge), 130, 670)
+  const y = side === 'n' || side === 's' ? cy(exit.edge) : clamp(cy(exit.edge), 40, 760)
+  return (
+    <div className={`exit-tag side-${side} ${exit.perimeter ? 'blocked' : ''}`} style={{ left: `${((x + 40) / 880) * 100}%`, top: `${((y + 40) / 880) * 100}%` }}>
+      <strong>{exit.title}</strong>
+      <span>{exit.sub}</span>
     </div>
   )
 }

@@ -67,3 +67,18 @@ export interface Outcome {
   state: GameState
   events: GameEvent[]
 }
+
+/** Sortie de quadrant prévue par la visée NAV, prête à afficher. */
+export interface AimExit {
+  edge: Pos
+  title: string
+  sub: string
+  perimeter: boolean
+}
+
+export interface Aim {
+  course: number
+  steps: number | null
+  kind: 'nav' | 'tor'
+  exit: AimExit | null
+}

@@ -481,6 +481,70 @@ p {
   to { stroke-dashoffset: -28; }
 }
 
+/* Sortie de quadrant : porte sur le bord franchi et étiquette de destination */
+.exit-gate { --gate: var(--peach); pointer-events: none; }
+.exit-gate.blocked { --gate: var(--rust); }
+.exit-gate .gate-glow {
+  stroke: var(--gate);
+  stroke-width: 16;
+  stroke-linecap: round;
+  opacity: 0.25;
+  animation: gate-pulse 1.4s ease-in-out infinite;
+}
+.exit-gate .gate-core { stroke: var(--gate); stroke-width: 4; stroke-linecap: round; }
+.exit-gate .gate-mark {
+  fill: none;
+  stroke: var(--gate);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: gate-chevron 1.2s ease-in-out infinite;
+}
+
+@keyframes gate-pulse {
+  50% { opacity: 0.6; }
+}
+@keyframes gate-chevron {
+  0%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+
+.exit-tag {
+  --gate: var(--peach);
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 12px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--gate);
+  background: rgba(0, 0, 0, 0.8);
+  color: var(--text);
+  white-space: nowrap;
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+.exit-tag.blocked { --gate: var(--rust); }
+.exit-tag strong {
+  color: var(--gate);
+  font-family: Antonio, sans-serif;
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.exit-tag span { color: var(--dim); }
+.exit-tag.side-e { transform: translate(calc(-100% - 22px), -50%); text-align: right; }
+.exit-tag.side-w { transform: translate(22px, -50%); }
+.exit-tag.side-n { transform: translate(-50%, 22px); text-align: center; }
+.exit-tag.side-s { transform: translate(-50%, calc(-100% - 22px)); text-align: center; }
+.exit-tag.three {
+  transform: translate(calc(-50% + var(--nx, 0px)), calc(-100% - 14px + var(--ny, 0px)));
+  text-align: center;
+}
+
 .shield-bubble {
   transform-box: fill-box;
   transform-origin: center;
@@ -1640,6 +1704,7 @@ input[type='range'] {
     scroll-behavior: auto !important;
   }
   .aim,
+  .exit-gate *,
   .starbase-ring,
   .cond-pill.red,
   .cond-red .elbow.top {

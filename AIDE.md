@@ -109,6 +109,7 @@ L’écran central montre le quadrant actuel, 8 × 8 secteurs. L’en-tête indi
 - **Cliquer une case vide, une étoile ou la base** ouvre le poste **NAV** avec le cap et le facteur warp qu’il faut pour s’y rendre (en s’arrêtant devant l’objet si la case est occupée).
 - Quand le poste TOR est ouvert, un clic sur n’importe quelle case règle le cap de tir.
 - Quand NAV ou TOR est ouvert, une **ligne de visée** montre la trajectoire prévue.
+- Si le saut NAV fait sortir du quadrant, une **porte orange** apparaît sur le bord franchi, avec le nom du quadrant d’arrivée, le secteur et ce qu’on en sait (inexploré, Klingons signalés). Si Starfleet bloque le saut au bord de la galaxie, la porte devient rouge et indique « Périmètre galactique » avec le point d’arrêt.
 
 Ces aides de visée exigent un ordinateur de bord en état de marche.
 

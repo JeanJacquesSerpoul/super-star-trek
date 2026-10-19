@@ -1,12 +1,12 @@
-import { Line, OrbitControls, Stars, Text } from '@react-three/drei'
+import { Html, Line, OrbitControls, Stars, Text } from '@react-three/drei'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
 import antonio from '@fontsource/antonio/files/antonio-latin-600-normal.woff?url'
 import { DEV, regionName } from '../../game/constants'
-import { courseVector } from '../../game/engine'
-import type { GameState, Klingon as KlingonT, Pos } from '../../game/types'
+import { courseVector, exitSide } from '../../game/engine'
+import type { Aim, AimExit, GameState, Klingon as KlingonT, Pos } from '../../game/types'
 import type { Fx, WarpPhase } from '../../useGame'
 import { Effect3D, makeShieldMaterial, toV } from './effects'
 import { Enterprise, Klingon, Star, Starbase, radialTexture } from './models'
@@ -17,7 +17,7 @@ export interface View3DProps {
   warp: WarpPhase
   shake: number
   moveMs: number
-  aim: { course: number; steps: number | null; kind: 'nav' | 'tor' } | null
+  aim: Aim | null
   describe: (p: Pos) => string | null
   onCell: (p: Pos) => void
   interactive: boolean
@@ -247,8 +247,9 @@ function AimLine({ aim, from }: { aim: NonNullable<View3DProps['aim']>; from: Po
     for (let i = 0; i < max; i++) {
       x += dr
       y += dc
-      out.push(toV({ r: x, c: y }, 0.03))
-      if (x < -0.5 || x > 7.5 || y < -0.5 || y > 7.5) break
+      const outside = x < -0.5 || x > 7.5 || y < -0.5 || y > 7.5
+      out.push(toV(outside && aim.exit ? aim.exit.edge : { r: x, c: y }, 0.03))
+      if (outside) break
     }
     return out
   }, [aim, from])
@@ -267,6 +268,74 @@ function AimLine({ aim, from }: { aim: NonNullable<View3DProps['aim']>; from: Po
       dashSize={0.12}
       gapSize={0.14}
     />
+  )
+}
+
+/** Rideau lumineux dressé sur le bord du quadrant : l'Enterprise passera ici en distorsion. */
+function ExitGate3D({ exit, course }: { exit: AimExit; course: number }) {
+  const side = exitSide(exit.edge)
+  const color = useMemo(() => new THREE.Color(exit.perimeter ? '#e2574c' : '#f2a65a').multiplyScalar(1.8), [exit.perimeter])
+  const fade = useMemo(() => {
+    const c = document.createElement('canvas')
+    c.width = 4
+    c.height = 64
+    const g = c.getContext('2d')!
+    const grad = g.createLinearGradient(0, 64, 0, 0)
+    grad.addColorStop(0, 'rgba(255,255,255,1)')
+    grad.addColorStop(1, 'rgba(255,255,255,0)')
+    g.fillStyle = grad
+    g.fillRect(0, 0, 4, 64)
+    return new THREE.CanvasTexture(c)
+  }, [])
+  const mat = useRef<THREE.MeshBasicMaterial>(null)
+  const tag = useRef<HTMLDivElement>(null)
+  const nudge = useRef({ x: 0, y: 0 })
+  useFrame(({ clock }) => {
+    if (mat.current) mat.current.opacity = 0.35 + 0.25 * Math.sin(clock.elapsedTime * 4.5)
+    // L'étiquette suit la caméra : on la décale pour qu'elle reste dans l'écran.
+    const el = tag.current
+    const view = el?.closest('.sector-view')
+    if (!el || !view) return
+    const r = el.getBoundingClientRect()
+    const v = view.getBoundingClientRect()
+    // Position sans décalage, puis décalage juste suffisant pour rentrer dans le cadre.
+    const n = nudge.current
+    const left = r.left - n.x
+    const top = r.top - n.y
+    n.x = Math.max(0, v.left + 8 - left) - Math.max(0, left + r.width - v.right + 8)
+    n.y = Math.max(0, v.top + 8 - top) - Math.max(0, top + r.height - v.bottom + 8)
+    el.style.setProperty('--nx', `${n.x}px`)
+    el.style.setProperty('--ny', `${n.y}px`)
+  })
+  const along = side === 'e' || side === 'w'
+  const base = toV(exit.edge)
+  const marks = exit.perimeter
+    ? [[[-0.14, 0.04, -0.14], [0.14, 0.04, 0.14]], [[-0.14, 0.04, 0.14], [0.14, 0.04, -0.14]]]
+    : [0, 1, 2].map((i) => [[-0.18 + i * 0.16, 0.04, -0.16], [i * 0.16, 0.04, 0], [-0.18 + i * 0.16, 0.04, 0.16]])
+  return (
+    <group position={base}>
+      <mesh position={[0, 0.35, 0]} rotation={[0, along ? Math.PI / 2 : 0, 0]}>
+        <planeGeometry args={[1, 0.7]} />
+        <meshBasicMaterial ref={mat} color={color} alphaMap={fade} transparent side={THREE.DoubleSide} depthWrite={false} toneMapped={false} blending={THREE.AdditiveBlending} />
+      </mesh>
+      <Line
+        points={along ? [[0, 0.02, -0.5], [0, 0.02, 0.5]] : [[-0.5, 0.02, 0], [0.5, 0.02, 0]]}
+        color={color}
+        lineWidth={3.5}
+        toneMapped={false}
+      />
+      <group rotation={[0, headingYaw(course), 0]}>
+        {marks.map((pts, i) => (
+          <Line key={i} points={pts as [number, number, number][]} color={color} lineWidth={2.6} toneMapped={false} />
+        ))}
+      </group>
+      <Html position={[0, 0.85, 0]} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
+        <div ref={tag} className={`exit-tag three ${exit.perimeter ? 'blocked' : ''}`}>
+          <strong>{exit.title}</strong>
+          <span>{exit.sub}</span>
+        </div>
+      </Html>
+    </group>
   )
 }
 
@@ -312,6 +381,7 @@ export default function SectorView3D({ state, fx, warp, shake, moveMs, aim, desc
         <Rig warp={warp} shake={shake}>
           <Board />
           {aim && !warp && <AimLine aim={aim} from={state.sector} />}
+          {aim?.exit && !warp && <ExitGate3D exit={aim.exit} course={aim.course} />}
           {hover && interactive && <Hover cell={hover.cell} />}
           <WarpShift warp={warp} heading={state.heading}>
             {!srsDown &&

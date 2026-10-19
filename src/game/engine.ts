@@ -378,15 +378,7 @@ export function navigate(state: GameState, course: number, warp: number): Outcom
   }
 
   if (leaving) {
-    let ar = Math.round(s.quad.r * 8 + start.r + n * dr)
-    let ac = Math.round(s.quad.c * 8 + start.c + n * dc)
-    let perimeter = false
-    if (ar < 0) { ar = 0; perimeter = true }
-    if (ar > 63) { ar = 63; perimeter = true }
-    if (ac < 0) { ac = 0; perimeter = true }
-    if (ac > 63) { ac = 63; perimeter = true }
-    const nq = { r: Math.floor(ar / 8), c: Math.floor(ac / 8) }
-    const ns = { r: ar % 8, c: ac % 8 }
+    const { quad: nq, sector: ns, perimeter } = exitTarget(s.quad, start, n, dr, dc)
     if (perimeter) {
       ctx.log('Lt Uhura : Starfleet refuse l’autorisation de franchir le périmètre galactique.', 'alert')
       ctx.log(`Scotty : moteurs coupés au secteur ${fmtPos(ns)} du quadrant ${regionName(nq.r, nq.c)}.`, 'quiet')
@@ -419,6 +411,57 @@ export function navigate(state: GameState, course: number, warp: number): Outcom
   checkDocking(ctx)
   checkVitals(ctx)
   return ctx.done()
+}
+
+/** Arrivée d'un saut qui sort du quadrant, bornée au périmètre galactique comme dans le BASIC. */
+function exitTarget(quad: Pos, start: Pos, n: number, dr: number, dc: number) {
+  const ar = Math.round(quad.r * 8 + start.r + n * dr)
+  const ac = Math.round(quad.c * 8 + start.c + n * dc)
+  const perimeter = ar < 0 || ar > 63 || ac < 0 || ac > 63
+  const r = Math.max(0, Math.min(63, ar))
+  const c = Math.max(0, Math.min(63, ac))
+  return { quad: { r: Math.floor(r / 8), c: Math.floor(c / 8) }, sector: { r: r % 8, c: c % 8 }, perimeter }
+}
+
+export interface NavExit {
+  /** Point où la trajectoire franchit le bord du quadrant (coordonnées de secteur, fractionnaires). */
+  edge: Pos
+  quad: Pos
+  sector: Pos
+  /** Starfleet bloque le saut au bord de la galaxie. */
+  perimeter: boolean
+}
+
+/**
+ * Prévision de NAV : si la trajectoire quitte le quadrant sans heurter d'obstacle,
+ * renvoie le point de sortie et le quadrant d'arrivée ; sinon null.
+ */
+export function navExit(s: GameState, course: number, warp: number): NavExit | null {
+  if (!(course >= 1 && course <= 9) || !(warp > 0)) return null
+  const n = Math.floor(warp * 8 + 0.5)
+  const [dr, dc] = courseVector(course)
+  let x = s.sector.r
+  let y = s.sector.c
+  for (let i = 0; i < n; i++) {
+    x += dr
+    y += dc
+    const p = { r: Math.round(x), c: Math.round(y) }
+    if (p.r < 0 || p.r > 7 || p.c < 0 || p.c > 7) {
+      const along = (pos: number, d: number) => (d > 0 ? (7.5 - pos) / d : d < 0 ? (-0.5 - pos) / d : Infinity)
+      const t = Math.min(along(s.sector.r, dr), along(s.sector.c, dc))
+      return { edge: { r: s.sector.r + t * dr, c: s.sector.c + t * dc }, ...exitTarget(s.quad, s.sector, n, dr, dc) }
+    }
+    const occ = cellAt(s, p)
+    if (occ && occ !== 'ship') return null
+  }
+  return null
+}
+
+/** Côté du quadrant franchi par la trajectoire. */
+export function exitSide(e: Pos): 'n' | 's' | 'e' | 'w' {
+  if (e.c >= 7.49) return 'e'
+  if (e.c <= -0.49) return 'w'
+  return e.r <= -0.49 ? 'n' : 's'
 }
 
 function spendTravel(ctx: Ctx, n: number, warp: number) {
