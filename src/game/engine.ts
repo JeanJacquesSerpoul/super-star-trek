@@ -1,5 +1,5 @@
 import { COURSE_VECTORS, DEV, DEVICES, KLINGON_BASE_ENERGY, MAX_ENERGY, MAX_TORPEDOES, regionName } from './constants'
-import type { GameEvent, GameState, Klingon, Outcome, Pos, Tone } from './types'
+import type { GameEvent, GameState, Klingon, Leg, NavBlock, Outcome, Pos, Tone } from './types'
 
 /*
  * Moteur de jeu : transcription des règles de « Super Star Trek » (Mike Mayfield 1971,
@@ -355,27 +355,8 @@ export function navigate(state: GameState, course: number, warp: number): Outcom
   s.heading = course
   const [dr, dc] = courseVector(course)
   const start = { ...s.sector }
-  let x = start.r
-  let y = start.c
-  const path: Pos[] = [{ ...start }]
-  let leaving = false
-  for (let i = 0; i < n; i++) {
-    x += dr
-    y += dc
-    const p = { r: Math.round(x), c: Math.round(y) }
-    if (p.r < 0 || p.r > 7 || p.c < 0 || p.c > 7) {
-      leaving = true
-      break
-    }
-    const occ = cellAt(s, p)
-    if (occ && occ !== 'ship') {
-      x -= dr
-      y -= dc
-      ctx.log(`Moteurs warp coupés au secteur ${fmtPos({ r: Math.round(x), c: Math.round(y) })} : obstacle sur la trajectoire.`, 'alert')
-      break
-    }
-    path.push(p)
-  }
+  const { path, leaving, block } = trace(s, dr, dc, n)
+  if (block) ctx.log(`Moteurs warp coupés au secteur ${fmtPos(block.stop)} : obstacle sur la trajectoire.`, 'alert')
 
   if (leaving) {
     const { quad: nq, sector: ns, perimeter } = exitTarget(s.quad, start, n, dr, dc)
@@ -403,7 +384,7 @@ export function navigate(state: GameState, course: number, warp: number): Outcom
       return ctx.done()
     }
   } else {
-    s.sector = { r: Math.round(x), c: Math.round(y) }
+    s.sector = { ...path[path.length - 1] }
     ctx.emit({ type: 'impulse', path })
   }
   spendTravel(ctx, n, warp)
@@ -440,21 +421,97 @@ export function navExit(s: GameState, course: number, warp: number): NavExit | n
   if (!(course >= 1 && course <= 9) || !(warp > 0)) return null
   const n = Math.floor(warp * 8 + 0.5)
   const [dr, dc] = courseVector(course)
+  if (!trace(s, dr, dc, n).leaving) return null
+  const along = (pos: number, d: number) => (d > 0 ? (7.5 - pos) / d : d < 0 ? (-0.5 - pos) / d : Infinity)
+  const t = Math.min(along(s.sector.r, dr), along(s.sector.c, dc))
+  return { edge: { r: s.sector.r + t * dr, c: s.sector.c + t * dc }, ...exitTarget(s.quad, s.sector, n, dr, dc) }
+}
+
+/**
+ * Trajet pas à pas de navigate : à chaque pas on ajoute le vecteur de cap et on arrondit
+ * la position, jusqu'au bord du quadrant ou à la première case occupée. Navigate et les
+ * prévisions de NAV passent toutes par ici, pour que l'écran annonce exactement ce que
+ * feront les moteurs.
+ */
+function trace(s: GameState, dr: number, dc: number, n: number): { path: Pos[]; leaving: boolean; block: NavBlock | null } {
+  let x = s.sector.r
+  let y = s.sector.c
+  const path: Pos[] = [{ ...s.sector }]
+  for (let i = 0; i < n; i++) {
+    x += dr
+    y += dc
+    const p = { r: Math.round(x), c: Math.round(y) }
+    if (p.r < 0 || p.r > 7 || p.c < 0 || p.c > 7) return { path, leaving: true, block: null }
+    const occ = cellAt(s, p)
+    if (occ && occ !== 'ship') return { path, leaving: false, block: { at: p, what: occ, stop: { ...path[path.length - 1] }, step: i + 1 } }
+    path.push(p)
+  }
+  return { path, leaving: false, block: null }
+}
+
+/**
+ * Prévision de NAV : premier obstacle qui coupera les moteurs avec ce cap et ce warp,
+ * ou null si la route est dégagée. Les Klingons se repositionnent avant le départ :
+ * pour eux, la prévision ne vaut que pour leur position actuelle.
+ */
+export function navBlock(s: GameState, course: number, warp: number): NavBlock | null {
+  if (!(course >= 1 && course <= 9) || !(warp > 0)) return null
+  const [dr, dc] = courseVector(course)
+  return trace(s, dr, dc, Math.floor(warp * 8 + 0.5)).block
+}
+
+/** Saut direct de from à to, retenu seulement s'il y arrive exactement sans rien heurter. */
+function directLeg(s: GameState, from: Pos, to: Pos): Leg | null {
+  const res = courseTo(from, to)
+  if (!res) return null
+  const [dr, dc] = courseVector(res.course)
+  const { path, leaving, block } = trace({ ...s, sector: from }, dr, dc, res.steps)
+  const end = path[path.length - 1]
+  if (leaving || block || end.r !== to.r || end.c !== to.c) return null
+  return { course: res.course, steps: res.steps, to }
+}
+
+/**
+ * Contournement : un saut direct vers l'une des cases visées, sinon deux sauts par une
+ * case libre intermédiaire. On retient la route la moins coûteuse en énergie (n + 10 par saut).
+ */
+export function detour(s: GameState, goals: Pos[]): Leg[] | null {
+  const routes: Leg[][] = []
+  for (const g of goals) {
+    const leg = directLeg(s, s.sector, g)
+    if (leg) routes.push([leg])
+  }
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const w = { r, c }
+      if (cellAt(s, w)) continue
+      const first = directLeg(s, s.sector, w)
+      if (!first) continue
+      for (const g of goals) {
+        const second = directLeg({ ...s, sector: w }, w, g)
+        if (second) routes.push([first, second])
+      }
+    }
+  }
+  const cost = (legs: Leg[]) => legs.reduce((sum, l) => sum + l.steps + 10, 0)
+  return routes.sort((a, b) => cost(a) - cost(b))[0] ?? null
+}
+
+/** Contournement de la trajectoire NAV bloquée, vers la case où elle devait mener. */
+export function navDetour(s: GameState, course: number, warp: number): Leg[] | null {
+  if (!navBlock(s, course, warp)) return null
+  const n = Math.floor(warp * 8 + 0.5)
+  const [dr, dc] = courseVector(course)
+  // Même cumul pas à pas que trace, pour tomber sur la même case d'arrivée.
   let x = s.sector.r
   let y = s.sector.c
   for (let i = 0; i < n; i++) {
     x += dr
     y += dc
-    const p = { r: Math.round(x), c: Math.round(y) }
-    if (p.r < 0 || p.r > 7 || p.c < 0 || p.c > 7) {
-      const along = (pos: number, d: number) => (d > 0 ? (7.5 - pos) / d : d < 0 ? (-0.5 - pos) / d : Infinity)
-      const t = Math.min(along(s.sector.r, dr), along(s.sector.c, dc))
-      return { edge: { r: s.sector.r + t * dr, c: s.sector.c + t * dc }, ...exitTarget(s.quad, s.sector, n, dr, dc) }
-    }
-    const occ = cellAt(s, p)
-    if (occ && occ !== 'ship') return null
   }
-  return null
+  const goal = { r: Math.round(x), c: Math.round(y) }
+  if (goal.r < 0 || goal.r > 7 || goal.c < 0 || goal.c > 7 || cellAt(s, goal)) return null
+  return detour(s, [goal])
 }
 
 /** Côté du quadrant franchi par la trajectoire. */

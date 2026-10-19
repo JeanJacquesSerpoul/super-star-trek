@@ -1,6 +1,6 @@
 import { DEV, DEVICES, MAX_TORPEDOES, regionName } from '../game/constants'
-import { condition, courseTo, daysLeft, fmtPos, repairEstimate } from '../game/engine'
-import type { GameState } from '../game/types'
+import { cellAt, condition, courseTo, daysLeft, detour, fmtPos, navBlock, navDetour, repairEstimate } from '../game/engine'
+import type { GameState, Leg, NavBlock, Pos } from '../game/types'
 import { CourseDial, CourseInput } from './CourseDial'
 import { Digits } from './GalaxyMap'
 
@@ -26,20 +26,26 @@ export function NavPanel({
   busy,
   course,
   warp,
+  block,
   setCourse,
   setWarp,
+  onLeg,
   onEngage,
 }: Common & {
   course: number
   warp: number
+  /** Obstacle prévu sur la trajectoire (null si dégagée ou si les senseurs ne le voient pas). */
+  block: NavBlock | null
   setCourse: (v: number) => void
   setWarp: (v: number) => void
+  onLeg: (leg: Leg) => void
   onEngage: () => void
 }) {
   const maxWarp = state.damage[DEV.warp] < 0 ? 0.2 : 8
   const n = Math.floor(warp * 8 + 0.5)
   const days = warp < 1 ? 0.1 * Math.floor(10 * warp) : 1
   const short = state.energy < n
+  const around = block ? navDetour(state, course, warp) : null
   return (
     <div className="cmd-panel">
       <CourseDial value={course} onChange={setCourse} tone="nav" />
@@ -64,6 +70,12 @@ export function NavPanel({
           <div><dt>Énergie</dt><dd className={short ? 'bad' : ''}>{n + 10} unités</dd></div>
           <div><dt>Durée</dt><dd>{fmt(days)} jour{days > 1 ? 's' : ''}</dd></div>
         </dl>
+        {block && (
+          <p className="warn">
+            Trajectoire obstruée : {blockText(block, state.sector, 'couperont')}
+          </p>
+        )}
+        {around && <DetourLine legs={around} busy={busy} onLeg={onLeg} />}
         {maxWarp < 8 && <p className="warn">Moteurs warp endommagés : warp 0,2 maximum.</p>}
         <button className="action peach" disabled={busy || warp > maxWarp} onClick={onEngage}>
           Engager
@@ -268,6 +280,11 @@ export function ComputerPanel({
   }
   const cond = { docked: 'Amarré', red: 'Rouge', yellow: 'Jaune', green: 'Vert' }[condition(state)]
   const toBase = state.base ? courseTo(state.sector, state.base) : null
+  const baseSteps = toBase ? Math.max(1, toBase.steps - 1) : 0
+  // Sans senseurs courte portée, l'ordinateur ne voit pas les obstacles.
+  const sees = state.damage[DEV.srs] >= 0
+  const baseBlock = toBase && toBase.steps > 1 && sees ? navBlock(state, toBase.course, baseSteps / 8) : null
+  const baseDetour = baseBlock && state.base ? detour(state, dockingCells(state, state.base)) : null
   return (
     <div className="cmd-panel single">
       <div className="cmd-body computer">
@@ -303,12 +320,21 @@ export function ComputerPanel({
         <section>
           <h3>Navigation vers la base</h3>
           {toBase ? (
-            <p>
-              Base stellaire en {fmtPos(state.base!)} : cap {toBase.course.toFixed(2)}, warp {fmt(Math.max(1, toBase.steps - 1) / 8)}.{' '}
-              <button className="chip" disabled={busy} onClick={() => onAim(toBase.course, 'nav', Math.max(1, toBase.steps - 1))}>
-                Tracer la route
-              </button>
-            </p>
+            <>
+              <p>
+                Base stellaire en {fmtPos(state.base!)} : cap {toBase.course.toFixed(2)}, warp {fmt(baseSteps / 8)}.{' '}
+                <button className="chip" disabled={busy} onClick={() => onAim(toBase.course, 'nav', baseSteps)}>
+                  Tracer la route
+                </button>
+              </p>
+              {baseBlock && <p className="warn">Route obstruée : {blockText(baseBlock, state.sector, 'couperaient')}</p>}
+              {baseBlock &&
+                (baseDetour ? (
+                  <DetourLine legs={baseDetour} busy={busy} onLeg={(l) => onAim(l.course, 'nav', l.steps)} />
+                ) : (
+                  <p className="quiet">Aucun contournement en deux sauts : rapprochez-vous d’abord par un autre chemin.</p>
+                ))}
+            </>
           ) : (
             <p className="quiet">Les senseurs ne détectent aucune base stellaire dans ce quadrant.</p>
           )}
@@ -319,6 +345,42 @@ export function ComputerPanel({
         </label>
       </div>
     </div>
+  )
+}
+
+const BLOCK_NAME: Record<NavBlock['what'], string> = { star: 'étoile', base: 'base stellaire', klingon: 'croiseur klingon' }
+
+/** « étoile en 3,2. Les moteurs couperont au secteur 2,1. » (verbe au futur ou au conditionnel) */
+function blockText(b: NavBlock, from: Pos, verb: string) {
+  const where = b.stop.r === from.r && b.stop.c === from.c ? 'aussitôt, sans que l’Enterprise ait bougé' : `au secteur ${fmtPos(b.stop)}`
+  const moving = b.what === 'klingon' ? ' Le croiseur se repositionnera avant le départ : la route peut se libérer, ou se fermer ailleurs.' : ''
+  return `${BLOCK_NAME[b.what]} en ${fmtPos(b.at)}. Les moteurs ${verb} ${where}.${moving}`
+}
+
+/** Cases libres voisines de la base : s'y arrêter suffit pour s'amarrer. */
+function dockingCells(s: GameState, base: Pos): Pos[] {
+  const out: Pos[] = []
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      const p = { r: base.r + dr, c: base.c + dc }
+      if (p.r < 0 || p.r > 7 || p.c < 0 || p.c > 7) continue
+      const what = p.r === s.sector.r && p.c === s.sector.c ? null : cellAt(s, p)
+      if (!what) out.push(p)
+    }
+  }
+  return out
+}
+
+/** Route de rechange proposée par l'ordinateur, avec un bouton pour régler le premier saut. */
+function DetourLine({ legs, busy, onLeg }: { legs: Leg[]; busy: boolean; onLeg: (leg: Leg) => void }) {
+  const leg = (l: Leg) => `cap ${l.course.toFixed(2)}, warp ${fmt(l.steps / 8)} jusqu’au secteur ${fmtPos(l.to)}`
+  return (
+    <p>
+      {legs.length === 1 ? `Route dégagée : ${leg(legs[0])}.` : `Contournement : ${leg(legs[0])}, puis ${leg(legs[1])}.`}{' '}
+      <button className="chip" disabled={busy} onClick={() => onLeg(legs[0])}>
+        {legs.length === 1 ? 'Tracer cette route' : 'Tracer le 1er saut'}
+      </button>
+    </p>
   )
 }
 

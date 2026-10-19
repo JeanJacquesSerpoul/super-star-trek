@@ -11,6 +11,7 @@ import {
   fireTorpedo,
   fmtPos,
   longRangeScan,
+  navBlock,
   navExit,
   navigate,
   setShields,
@@ -80,6 +81,8 @@ export default function App() {
   const playing = state.status === 'playing'
   const ready = briefed && playing && !busy
   const computerOk = state.damage[DEV.computer] >= 0
+  // Prévoir les obstacles demande l'ordinateur de bord et des senseurs courte portée qui les voient.
+  const foresee = computerOk && state.damage[DEV.srs] >= 0
   const cond = condition(shown)
 
   const choose = (id: PanelId) => {
@@ -132,7 +135,8 @@ export default function App() {
     if (!res) return name
     if (what === 'klingon' || panel === 'tor') return `${name} : cap ${res.course.toFixed(2)}`
     const steps = what ? res.steps - 1 : res.steps
-    return `${name} : cap ${res.course.toFixed(2)}, ${steps} secteur${steps > 1 ? 's' : ''}`
+    const block = foresee && steps > 0 ? navBlock(shown, res.course, steps / 8) : null
+    return `${name} : cap ${res.course.toFixed(2)}, ${steps} secteur${steps > 1 ? 's' : ''}${block ? `, obstacle en ${fmtPos(block.at)}` : ''}`
   }
 
   const onCell = (p: Pos) => {
@@ -171,12 +175,14 @@ export default function App() {
     sfx.beep(1040)
   }
 
+  const navBlocked = useMemo(() => (foresee ? navBlock(state, navCourse, warp) : null), [foresee, state, navCourse, warp])
+
   const aim = useMemo((): Aim | null => {
     if (!briefed || busy || !playing) return null
-    if (panel === 'nav') return { course: navCourse, steps: Math.floor(warp * 8 + 0.5), kind: 'nav', exit: describeExit(state, navCourse, warp) }
-    if (panel === 'tor') return { course: torCourse, steps: null, kind: 'tor', exit: null }
+    if (panel === 'nav') return { course: navCourse, steps: Math.floor(warp * 8 + 0.5), kind: 'nav', exit: describeExit(state, navCourse, warp), block: navBlocked }
+    if (panel === 'tor') return { course: torCourse, steps: null, kind: 'tor', exit: null, block: null }
     return null
-  }, [panel, navCourse, warp, torCourse, busy, playing, briefed, state])
+  }, [panel, navCourse, warp, torCourse, busy, playing, briefed, state, navBlocked])
 
   const viewProps = {
     state: shown,
@@ -319,7 +325,21 @@ export default function App() {
         <section className="station" aria-label={PANELS.find((p) => p.id === panel)!.label}>
           <h2 className={`station-head head-${PANELS.find((p) => p.id === panel)!.tone}`}>{PANELS.find((p) => p.id === panel)!.label}</h2>
           {panel === 'nav' && (
-            <NavPanel state={state} busy={!ready} course={navCourse} warp={warp} setCourse={setNavCourse} setWarp={setWarpFactor} onEngage={commands.nav} />
+            <NavPanel
+              state={state}
+              busy={!ready}
+              course={navCourse}
+              warp={warp}
+              block={navBlocked}
+              setCourse={setNavCourse}
+              setWarp={setWarpFactor}
+              onLeg={(leg) => {
+                setNavCourse(leg.course)
+                setWarpFactor(leg.steps / 8)
+                sfx.beep(1040)
+              }}
+              onEngage={commands.nav}
+            />
           )}
           {panel === 'tor' && <TorpedoPanel state={state} busy={!ready} course={torCourse} setCourse={setTorCourse} onFire={commands.tor} />}
           {panel === 'pha' && <PhaserPanel state={state} busy={!ready} amount={phaser} setAmount={setPhaser} onFire={commands.pha} />}

@@ -148,6 +148,7 @@ Pour déplacer l’Enterprise dans le quadrant ou d’un quadrant à l’autre.
 
 - Un facteur warp de **1** fait parcourir **8 secteurs**, soit un quadrant. Un warp de 0,5 fait 4 secteurs.
 - Le vaisseau s’arrête devant une étoile, une base ou un croiseur qui barre la route.
+- Si la trajectoire réglée bute sur un obstacle, NAV l’annonce en rouge (quoi, où, et le secteur où les moteurs couperont) et la ligne de visée s’arrête à ce point, marqué d’une barre rouge, l’obstacle étant cerclé de pointillés. L’ordinateur propose alors un contournement en un ou deux sauts ; le bouton règle le premier. Les croiseurs klingons se repositionnent avant le départ : pour eux, l’avertissement n’est qu’indicatif. Ces prévisions demandent l’ordinateur de bord et les senseurs courte portée ; COM signale de même une route obstruée vers la base.
 - Il est impossible de franchir le bord de la galaxie : les moteurs se coupent au périmètre.
 - Si les **moteurs warp** sont endommagés, la vitesse est limitée à warp 0,2.
 

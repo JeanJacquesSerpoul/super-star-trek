@@ -6,7 +6,7 @@ import * as THREE from 'three'
 import antonio from '@fontsource/antonio/files/antonio-latin-600-normal.woff?url'
 import { DEV, regionName } from '../../game/constants'
 import { courseVector, exitSide } from '../../game/engine'
-import type { Aim, AimExit, GameState, Klingon as KlingonT, Pos } from '../../game/types'
+import type { Aim, AimExit, GameState, Klingon as KlingonT, NavBlock, Pos } from '../../game/types'
 import type { Fx, WarpPhase } from '../../useGame'
 import { Effect3D, makeShieldMaterial, toV } from './effects'
 import { Enterprise, Klingon, Star, Starbase, radialTexture } from './models'
@@ -243,7 +243,8 @@ function AimLine({ aim, from }: { aim: NonNullable<View3DProps['aim']>; from: Po
     const out: THREE.Vector3[] = [toV(from, 0.03)]
     let x = from.r
     let y = from.c
-    const max = aim.steps ?? 20
+    // Devant un obstacle, la ligne s'arrête au dernier pas avant lui (case où les moteurs couperont).
+    const max = aim.block ? aim.block.step - 1 : (aim.steps ?? 20)
     for (let i = 0; i < max; i++) {
       x += dr
       y += dc
@@ -251,6 +252,8 @@ function AimLine({ aim, from }: { aim: NonNullable<View3DProps['aim']>; from: Po
       out.push(toV(outside && aim.exit ? aim.exit.edge : { r: x, c: y }, 0.03))
       if (outside) break
     }
+    // Line exige au moins deux points : bloqué dès le premier pas, on n'en garde qu'un.
+    if (out.length < 2) out.push(out[0].clone())
     return out
   }, [aim, from])
   const ref = useRef<{ material: { dashOffset: number } } | null>(null)
@@ -268,6 +271,31 @@ function AimLine({ aim, from }: { aim: NonNullable<View3DProps['aim']>; from: Po
       dashSize={0.12}
       gapSize={0.14}
     />
+  )
+}
+
+/** Arrêt prévu : barre devant la proue au point d'arrêt, anneau pointillé autour de l'obstacle. */
+function BlockMark3D({ block, from, course }: { block: NavBlock; from: Pos; course: number }) {
+  const [dr, dc] = courseVector(course)
+  const end = { r: from.r + (block.step - 1) * dr, c: from.c + (block.step - 1) * dc }
+  const color = useMemo(() => new THREE.Color('#e2574c').multiplyScalar(1.8), [])
+  const ring = useMemo(
+    () =>
+      Array.from({ length: 49 }, (_, i) => {
+        const a = (i / 48) * Math.PI * 2
+        return [Math.cos(a) * 0.44, 0.03, Math.sin(a) * 0.44] as [number, number, number]
+      }),
+    [],
+  )
+  return (
+    <>
+      <group position={toV(block.at)}>
+        <Line points={ring} color={color} lineWidth={1.6} dashed dashSize={0.09} gapSize={0.08} toneMapped={false} />
+      </group>
+      <group position={toV(end)} rotation={[0, headingYaw(course), 0]}>
+        <Line points={[[0.36, 0.03, -0.17], [0.36, 0.03, 0.17]]} color={color} lineWidth={3} toneMapped={false} />
+      </group>
+    </>
   )
 }
 
@@ -382,6 +410,7 @@ export default function SectorView3D({ state, fx, warp, shake, moveMs, aim, desc
           <Board />
           {aim && !warp && <AimLine aim={aim} from={state.sector} />}
           {aim?.exit && !warp && <ExitGate3D exit={aim.exit} course={aim.course} />}
+          {aim?.block && !warp && <BlockMark3D block={aim.block} from={state.sector} course={aim.course} />}
           {hover && interactive && <Hover cell={hover.cell} />}
           <WarpShift warp={warp} heading={state.heading}>
             {!srsDown &&

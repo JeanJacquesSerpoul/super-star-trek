@@ -481,6 +481,22 @@ p {
   to { stroke-dashoffset: -28; }
 }
 
+/* Obstacle sur la trajectoire NAV : arrêt prévu et cercle autour de l'obstacle */
+.aim-block { pointer-events: none; }
+.aim-block .block-ring {
+  fill: none;
+  stroke: var(--rust);
+  stroke-width: 2.5;
+  stroke-dasharray: 6 7;
+  opacity: 0.85;
+}
+.aim-block .block-bar {
+  stroke: var(--rust);
+  stroke-width: 5;
+  stroke-linecap: round;
+  animation: gate-pulse 1.4s ease-in-out infinite;
+}
+
 /* Sortie de quadrant : porte sur le bord franchi et étiquette de destination */
 .exit-gate { --gate: var(--peach); pointer-events: none; }
 .exit-gate.blocked { --gate: var(--rust); }

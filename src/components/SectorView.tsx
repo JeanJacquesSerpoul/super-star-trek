@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DEV, regionName } from '../game/constants'
 import { courseVector, exitSide } from '../game/engine'
-import type { Aim, AimExit, GameState, Pos } from '../game/types'
+import type { Aim, AimExit, GameState, NavBlock, Pos } from '../game/types'
 import type { Fx, WarpPhase } from '../useGame'
 import { Enterprise, Klingon, Star, StarGlowDefs, Starbase } from './art'
 
@@ -73,7 +73,8 @@ export function SectorView({ state, fx, warp, shake, moveMs, aim, describe, onCe
     const pts: Pos[] = [state.sector]
     let x = state.sector.r
     let y = state.sector.c
-    const max = aim.steps ?? 20
+    // Devant un obstacle, la ligne s'arrête au dernier pas avant lui (case où les moteurs couperont).
+    const max = aim.block ? aim.block.step - 1 : (aim.steps ?? 20)
     for (let i = 0; i < max; i++) {
       x += dr
       y += dc
@@ -150,6 +151,7 @@ export function SectorView({ state, fx, warp, shake, moveMs, aim, describe, onCe
             />
           )}
           {aim?.exit && <ExitGate exit={aim.exit} course={aim.course} />}
+          {aim?.block && aimPath && <BlockMark block={aim.block} end={aimPath[aimPath.length - 1]} course={aim.course} />}
 
           {!srsDown &&
             state.stars.map((s, i) => (
@@ -263,6 +265,18 @@ function ExitGate({ exit, course }: { exit: AimExit; course: number }) {
         ) : (
           [0, 1, 2].map((i) => <path key={i} d={`M${-8 + i * 9} -10 L${i * 9} 0 L${-8 + i * 9} 10`} className="gate-mark" style={{ animationDelay: `${i * 0.15}s` }} />)
         )}
+      </g>
+    </g>
+  )
+}
+
+/** Arrêt prévu : barre devant la proue au point d'arrêt, cercle pointillé autour de l'obstacle. */
+function BlockMark({ block, end, course }: { block: NavBlock; end: Pos; course: number }) {
+  return (
+    <g className="aim-block">
+      <circle cx={cx(block.at)} cy={cy(block.at)} r="42" className="block-ring" />
+      <g transform={`translate(${cx(end)} ${cy(end)}) rotate(${headingDeg(course)})`}>
+        <line x1="36" y1="-16" x2="36" y2="16" className="block-bar" />
       </g>
     </g>
   )

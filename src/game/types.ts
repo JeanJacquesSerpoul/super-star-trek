@@ -76,9 +76,28 @@ export interface AimExit {
   perimeter: boolean
 }
 
+/** Obstacle qui coupera les moteurs warp, d'après la prévision de NAV. */
+export interface NavBlock {
+  /** Case occupée rencontrée par la trajectoire. */
+  at: Pos
+  what: 'klingon' | 'star' | 'base'
+  /** Case où l'Enterprise s'immobilisera. */
+  stop: Pos
+  /** Pas de la trajectoire (1 à n) où l'obstacle est atteint. */
+  step: number
+}
+
+/** Un saut proposé par l'ordinateur : cap, nombre de secteurs et case d'arrivée. */
+export interface Leg {
+  course: number
+  steps: number
+  to: Pos
+}
+
 export interface Aim {
   course: number
   steps: number | null
   kind: 'nav' | 'tor'
   exit: AimExit | null
+  block: NavBlock | null
 }
