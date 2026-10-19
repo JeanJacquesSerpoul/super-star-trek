@@ -801,6 +801,81 @@ p {
   color: var(--text);
 }
 
+/* ------------------------------------------------------------ amarrage et ravitaillement */
+
+.dock-tether {
+  stroke: var(--green);
+  stroke-width: 3;
+  stroke-dasharray: 3 9;
+  stroke-linecap: round;
+  opacity: 0.6;
+  animation: march 1.6s linear infinite;
+}
+
+.fx-dock .stream-glow { stroke: var(--green); stroke-width: 18; stroke-linecap: round; opacity: 0.18; }
+.fx-dock .stream-core { stroke: #c9ffe0; stroke-width: 3; stroke-linecap: round; opacity: 0.8; }
+.fx-dock .stream-dot { fill: #e4fff0; filter: drop-shadow(0 0 6px var(--green)); }
+.fx-dock .dock-ring {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 3;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dock-ring 1.05s ease-out infinite both;
+}
+.fx-dock .dock-aura { fill: var(--green); opacity: 0.12; }
+
+@keyframes dock-ring {
+  from { transform: scale(0.4); opacity: 0.9; }
+  to { transform: scale(1.5); opacity: 0; }
+}
+
+.dock-banner {
+  position: absolute;
+  z-index: 3;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 10px 22px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--green);
+  background: rgba(0, 12, 6, 0.86);
+  box-shadow: 0 0 24px rgba(110, 231, 160, 0.35);
+  pointer-events: none;
+  white-space: nowrap;
+  animation: dock-banner 4.1s ease-in-out both;
+}
+.dock-banner strong {
+  color: var(--green);
+  font-family: Antonio, sans-serif;
+  font-weight: 600;
+  font-size: 1.3rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dock-lines { display: flex; gap: 18px; color: var(--dim); font-size: 0.95rem; }
+.dock-lines b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+@keyframes dock-banner {
+  0% { opacity: 0; transform: translate(-50%, -10px); }
+  8%, 85% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -6px); }
+}
+
+.status.refueling {
+  box-shadow: 0 0 0 1px var(--green), 0 0 22px rgba(110, 231, 160, 0.3);
+  transition: box-shadow 300ms;
+}
+.status.refueling .gauge-track span {
+  transition: width 80ms linear;
+  box-shadow: 0 0 10px var(--green);
+}
+.status.refueling .tone-peach .gauge-track span { background: linear-gradient(90deg, var(--peach), var(--green)); }
+.status.refueling .pip.on { background: var(--green); box-shadow: 0 0 8px rgba(110, 231, 160, 0.7); }
+
 /* ------------------------------------------------------------ poste de commande */
 
 .station {
@@ -1705,6 +1780,9 @@ input[type='range'] {
   }
   .aim,
   .exit-gate *,
+  .dock-tether,
+  .fx-dock *,
+  .dock-banner,
   .starbase-ring,
   .cond-pill.red,
   .cond-red .elbow.top {

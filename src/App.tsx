@@ -304,6 +304,20 @@ export default function App() {
           ) : (
             <SectorView {...viewProps} />
           )}
+          {game.refuel && (
+            <div className="dock-banner" key={game.refuel.id} role="status">
+              <strong>Amarrage à la base stellaire</strong>
+              <span className="dock-lines">
+                <span>Énergie <b>{game.refuel.energy > 0 ? `+${game.refuel.energy}` : 'pleine'}</b></span>
+                <span>Torpilles <b>{game.refuel.torpedoes > 0 ? `+${game.refuel.torpedoes}` : 'pleines'}</b></span>
+                <span>
+                  {game.refuel.repairs > 0
+                    ? `${game.refuel.repairs} système${game.refuel.repairs > 1 ? 's' : ''} à réparer : poste DAM`
+                    : 'Aucune avarie'}
+                </span>
+              </span>
+            </div>
+          )}
           {view === '3d' && <p className="view-hint">Glissez pour faire pivoter la caméra, double-cliquez pour la recentrer.</p>}
           {briefed && !busy && state.status !== 'playing' && (
             <div className={`ending ${state.status}`}>
@@ -349,7 +363,7 @@ export default function App() {
 
       <aside className="sidecol">
         <GalaxyMap state={shown} names={names} onQuadrant={onQuadrant} describe={describeQuad} interactive={ready} />
-        <Status state={shown} />
+        <Status state={shown} refueling={!!game.refuel} />
         <CaptainsLog log={game.log} onCommand={runText} />
       </aside>
 
@@ -387,10 +401,10 @@ function Gauge({ label, value, max, tone }: { label: string; value: number; max:
   )
 }
 
-function Status({ state }: { state: GameState }) {
+function Status({ state, refueling }: { state: GameState; refueling: boolean }) {
   const hurt = state.damage.filter((d) => d < 0).length
   return (
-    <section className="status panel-frame" aria-label="État du vaisseau">
+    <section className={`status panel-frame ${refueling ? 'refueling' : ''}`} aria-label="État du vaisseau">
       <header className="frame-head">
         <h2>État du vaisseau</h2>
         <span className={hurt ? 'legend bad' : 'legend'}>{hurt ? `${hurt} système${hurt > 1 ? 's' : ''} endommagé${hurt > 1 ? 's' : ''}` : 'Tous systèmes opérationnels'}</span>

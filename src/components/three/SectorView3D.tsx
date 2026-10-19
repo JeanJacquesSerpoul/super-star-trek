@@ -8,7 +8,7 @@ import { DEV, regionName } from '../../game/constants'
 import { courseVector, exitSide } from '../../game/engine'
 import type { Aim, AimExit, GameState, Klingon as KlingonT, Pos } from '../../game/types'
 import type { Fx, WarpPhase } from '../../useGame'
-import { Effect3D, makeShieldMaterial, toV } from './effects'
+import { DockTether, Effect3D, makeShieldMaterial, toV } from './effects'
 import { Enterprise, Klingon, Star, Starbase, radialTexture } from './models'
 
 export interface View3DProps {
@@ -390,6 +390,7 @@ export default function SectorView3D({ state, fx, warp, shake, moveMs, aim, desc
                   <Star seed={(s.r * 13 + s.c * 7 + seed) % 17} />
                 </group>
               ))}
+            {!srsDown && state.base && state.docked && !moveMs && <DockTether base={state.base} ship={state.sector} />}
             {!srsDown && state.base && (
               <group position={toV(state.base)}>
                 <Starbase />

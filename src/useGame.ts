@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { sfx } from './audio'
+import { MAX_ENERGY, MAX_TORPEDOES } from './game/constants'
 import { newGame } from './game/engine'
 import type { GameEvent, GameState, LogLine, Outcome, Pos } from './game/types'
 
@@ -9,6 +10,15 @@ export type Fx =
   | { id: number; kind: 'explode'; at: Pos; big: boolean }
   | { id: number; kind: 'disruptor'; from: Pos; to: Pos }
   | { id: number; kind: 'absorb'; at: Pos }
+  | { id: number; kind: 'dock'; base: Pos; ship: Pos; ms: number }
+
+/** Ravitaillement en cours, pour le bandeau d'amarrage et les jauges. */
+export interface Refuel {
+  id: number
+  energy: number
+  torpedoes: number
+  repairs: number
+}
 
 export type WarpPhase = 'out' | 'in' | null
 
@@ -30,12 +40,42 @@ export function useGame() {
   const [shake, setShake] = useState(0)
   const [alertPulse, setAlertPulse] = useState(0)
   const [moveMs, setMoveMs] = useState(0)
+  const [refuel, setRefuel] = useState<Refuel | null>(null)
   const run = useRef(0)
 
   const play = useCallback(async (events: GameEvent[], final: GameState) => {
     const token = ++run.current
     const alive = () => run.current === token
     const speed = reduced() ? 0.35 : 1
+    // Un amarrage annoncé pendant le saut en distorsion attend l'arrivée dans le nouveau quadrant.
+    let warping = false
+    let pendingDock: Extract<GameEvent, { type: 'dock' }> | null = null
+
+    const dock = async (e: Extract<GameEvent, { type: 'dock' }>) => {
+      const id = uid++
+      const ms = 1500 * speed
+      const gained = { energy: Math.round(MAX_ENERGY - e.before.energy), torpedoes: MAX_TORPEDOES - e.before.torpedoes }
+      sfx.dock()
+      setFx((f) => [...f, { id, kind: 'dock', base: e.base, ship: e.ship, ms }])
+      setTimeout(() => setFx((f) => f.filter((x) => x.id !== id)), ms + 400)
+      setRefuel({ id, ...gained, repairs: e.repairs })
+      setTimeout(() => setRefuel((r) => (r?.id === id ? null : r)), ms + 2600)
+      // Les jauges se remplissent pendant que l'énergie afflue de la base.
+      const steps = 24
+      for (let i = 1; i <= steps; i++) {
+        if (!alive()) return
+        const k = i / steps
+        setShown((s) => ({
+          ...s,
+          docked: true,
+          energy: e.before.energy + (MAX_ENERGY - e.before.energy) * k,
+          shields: e.before.shields * (1 - k),
+          torpedoes: Math.max(s.torpedoes, Math.floor(e.before.torpedoes + gained.torpedoes * k)),
+        }))
+        await sleep(ms / steps)
+      }
+    }
+
     setBusy(true)
     for (const e of events) {
       if (!alive()) return
@@ -104,6 +144,7 @@ export function useGame() {
         }
         case 'warp':
           if (e.leaving) {
+            warping = true
             sfx.warp()
             setShown((s) => ({ ...s, heading: final.heading }))
             setWarp('out')
@@ -112,6 +153,11 @@ export function useGame() {
             setWarp('in')
             await sleep(650 * speed)
             setWarp(null)
+            warping = false
+            if (pendingDock) {
+              await dock(pendingDock)
+              pendingDock = null
+            }
           }
           break
         case 'alert':
@@ -119,7 +165,8 @@ export function useGame() {
           setAlertPulse((n) => n + 1)
           break
         case 'dock':
-          sfx.dock()
+          if (warping) pendingDock = e
+          else await dock(e)
           break
       }
     }
@@ -144,6 +191,7 @@ export function useGame() {
     const out = newGame()
     setLog([])
     setFx([])
+    setRefuel(null)
     setState(out.state)
     setShown(out.state)
     void play(out.events, out.state)
@@ -162,5 +210,5 @@ export function useGame() {
 
   useEffect(() => () => void run.current++, [])
 
-  return { state, shown, log, fx, busy, warp, shake, alertPulse, moveMs, apply, restart, begin, say }
+  return { state, shown, log, fx, busy, warp, shake, alertPulse, moveMs, refuel, apply, restart, begin, say }
 }

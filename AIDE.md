@@ -400,6 +400,7 @@ Les raccourcis sont ignorés pendant la saisie dans un champ de texte (champ Com
 - Il suffit de se placer sur une case **voisine** de la base, diagonales comprises.
 - L’amarrage remplit l’énergie (3000) et les torpilles (10), et abaisse les boucliers à zéro.
 - Tant que vous êtes amarré, les tirs klingons ne vous atteignent pas.
+- À l’amarrage, un flux d’énergie vert coule de la base vers l’Enterprise, les jauges se remplissent sous vos yeux et un bandeau résume le ravitaillement : énergie et torpilles reçues, systèmes à réparer. Une liaison en pointillés verts relie ensuite le vaisseau à la base tant que vous restez amarré.
 
 ### Combat
 
